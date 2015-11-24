@@ -64,7 +64,7 @@ fn test_loaded_model() {
     // predict some test instances
     let test_vec = vec![(1,0.708333), (2,1.0), (3,1.0), (4,-0.320755), (5,-0.105023), (6,-1.0),
                         (7,1.0), (8,-0.419847), (9,-1.0), (10,-0.225806), (12,1.0), (13,-1.0)];
-    assert!([1.0, -1.0].contains(&model.predict(&test_vec)));
+    assert!([1.0, -1.0].contains(&model.sparse_predict(&test_vec)));
 
     // save and reload the model
     let new_modelfile = "tests/data/heart_scale_2.model";
