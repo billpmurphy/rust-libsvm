@@ -18,9 +18,9 @@ fn test_parse_data_from_file() {
 fn test_use_dense_data() {
     // Convert dense data, build RBF model
     let y = vec![0.0, 1.0, 0.0];
-    let x = vec![vec![1.0, 0.0, 2.1],
-                 vec![4.2, 5.2, 9.1],
-                 vec![9.2, 2.3, 0.0]];
+    let x = vec![vec![1.1, 0.0, 8.4],
+                 vec![0.9, 1.0, 9.1],
+                 vec![1.2, 1.0, 9.0]];
 
     let problem = dense_problem(y, x).unwrap();
     let params = SvmParam::new(2);
