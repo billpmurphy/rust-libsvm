@@ -197,12 +197,12 @@ impl SvmModel {
         indicies
     }
 
-    /// Do classification or regression on a test vector x given a model.
+    /// Do classification or regression on a test sparse vector x given a model.
     ///
     /// For a classification model, the predicted class for x is returned. For a regression model,
     /// the function value of x calculated using the model is returned. For an one-class model, +1
     /// or -1 is returned.
-    pub fn predict(&self, feature_vec: &[(i32, f64)]) -> f64 {
+    pub fn sparse_predict(&self, feature_vec: &[(i32, f64)]) -> f64 {
         let svm_nodes: Vec<SvmNode> = feature_vec
             .iter()
             .map(|&(i, c)| SvmNode { index: i, value: c })
@@ -212,6 +212,20 @@ impl SvmModel {
         unsafe {
             svm_predict(c_model, c_vec) as f64
         }
+    }
+
+    /// Do classification or regression on a test dense vector x given a model.
+    ///
+    /// For a classification model, the predicted class for x is returned. For a regression model,
+    /// the function value of x calculated using the model is returned. For an one-class model, +1
+    /// or -1 is returned.
+    pub fn dense_predict(&self, feature_vec: &[f64]) -> f64 {
+        let sparse_vec: Vec<(i32, f64)> = feature_vec.iter()
+            .filter(|x| **x != 0.0)
+            .enumerate()
+            .map(|(i, &x)| (i as i32, x))
+            .collect();
+        self.sparse_predict(&sparse_vec)
     }
 
     /// Do classification or regression on a test vector x given a model with probability

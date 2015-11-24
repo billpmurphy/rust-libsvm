@@ -1,5 +1,7 @@
 # rust-libsvm
 
+[![Build Status](https://travis-ci.org/billpmurphy/rust-libsvm.svg)](https://travis-ci.org/billpmurphy/rust-libsvm)
+
 Rust bindings and interface to [libsvm](https://github.com/cjlin1/libsvm).
 
 **Status**: Unfinished
@@ -7,7 +9,7 @@ Rust bindings and interface to [libsvm](https://github.com/cjlin1/libsvm).
 
 ## Example usage
 
-Build a model using dense data.
+Build a model using dense data and predict the class of a new instance.
 
 ```rust
 extern crate libsvm;
@@ -22,6 +24,6 @@ let problem = dense_problem(y, x).unwrap();
 let params = SvmParam::new(2);
 let model = problem.train(&params).unwrap();
 
-let x_new = vec![(0, 1.0), (2, 9.2)];
-let prediction = model.predict(x_new);
+let x_new = vec![1.0, 1.0, 9.2];
+let prediction = model.dense_predict(&x_new);
 ```
