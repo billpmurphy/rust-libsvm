@@ -228,13 +228,19 @@ impl SvmModel {
         self.sparse_predict(&sparse_vec)
     }
 
-    /// Do classification or regression on a test vector x given a model with probability
+    /// Do classification or regression on a sparse test vector x given a model with probability
     /// information.
-    pub fn predict_probability(&self, feature_vec: &[(i32, f64)]) {
+    pub fn sparse_predict_probability(&self, feature_vec: &[(i32, f64)]) -> Vec<f64>{
         panic!("Not implemented yet.")
     }
 
-    /// Conduct ross-validation. Data are separated to num_folds folds. Under given parameters,
+    /// Do classification or regression on a dense test vector x given a model with probability
+    /// information.
+    pub fn dense_predict_probability(&self, feature_vec: &[f64]) -> Vec<f64>{
+        panic!("Not implemented yet.")
+    }
+
+    /// Conduct cross-validation. Data are separated to num_folds folds. Under given parameters,
     /// sequentially each fold is validated using the model from training the remaining.
     pub fn cross_validation(&self, prob: &SvmProb, num_folds: i32) -> Vec<f64> {
         panic!("Not implemented yet")
@@ -348,6 +354,16 @@ impl SvmProb {
             }
         }
     }
+
+    /// Scale the feature vectors to [lower, upper].
+    pub fn scale_x(&mut self, lower: &Option<f64>, upper: &Option<f64>) {
+        panic!("Not implemented yet.")
+    }
+
+    /// Scale the y vector to [lower, upper].
+    pub fn scale_y(&mut self, lower: &Option<f64>, upper: &Option<f64>) {
+        panic!("Not implemented yet.")
+    }
 }
 
 
@@ -439,8 +455,6 @@ pub fn load_model(filename: &str) -> Result<SvmModel, SvmErr> {
         }
     }
 }
-
-
 
 
 /// Load a problem from file.
