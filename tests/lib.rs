@@ -1,7 +1,7 @@
 use std::fs;
 
-extern crate libsvm;
-use libsvm::*;
+extern crate rust_libsvm;
+use rust_libsvm::*;
 
 #[test]
 fn test_parse_data_from_file() {
