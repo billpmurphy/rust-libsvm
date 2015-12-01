@@ -6,5 +6,10 @@ authors = ["Bill Murphy <billpmurphy92@gmail.com>"]
 build = "build.rs"
 links = "libsvm.a"
 
+description = "Rust API to the libsvm C library."
+repository = "https://github.com/billpmurphy/rust-libsvm"
+keywords = ["machine learning", "statistics", "svm", "support vector machines"]
+license = "MIT"
+
 [build-dependencies]
 gcc = "0.3"

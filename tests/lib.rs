@@ -4,6 +4,34 @@ extern crate rust_libsvm;
 use rust_libsvm::*;
 
 #[test]
+fn test_version() {
+    assert_eq!(version(), 320);
+}
+
+#[test]
+fn test_metrics() {
+    let gt = vec![0, 0, 1, 0, 1, 2, 2, 3, 4, 4];
+    let pr = vec![0, 0, 1, 0, 0, 2, 2, 4, 3, 3];
+
+    assert_eq!(metrics::accuracy(&gt, &pr), 0.6);
+    assert_eq!(metrics::class_recall(&gt, &pr, &0), 1.0);
+    assert_eq!(metrics::class_recall(&gt, &pr, &1), 0.5);
+    assert_eq!(metrics::class_recall(&gt, &pr, &2), 1.0);
+    assert_eq!(metrics::class_recall(&gt, &pr, &3), 0.0);
+    assert_eq!(metrics::class_recall(&gt, &pr, &4), 0.0);
+    assert_eq!(metrics::class_precision(&gt, &pr, &0), 0.75);
+    assert_eq!(metrics::class_precision(&gt, &pr, &1), 1.0);
+    assert_eq!(metrics::class_precision(&gt, &pr, &2), 1.0);
+    assert_eq!(metrics::class_precision(&gt, &pr, &3), 0.0);
+    assert_eq!(metrics::class_precision(&gt, &pr, &4), 0.0);
+    assert_eq!((metrics::class_f_measure(&gt, &pr, &0) * 100.0).round() as i32, 86);
+    assert_eq!((metrics::class_f_measure(&gt, &pr, &1) * 100.0).round() as i32, 67);
+    assert_eq!(metrics::class_f_measure(&gt, &pr, &2), 1.0);
+    assert_eq!(metrics::class_f_measure(&gt, &pr, &3), 0.0);
+    assert_eq!(metrics::class_f_measure(&gt, &pr, &4), 0.0);
+}
+
+#[test]
 fn test_parse_data_from_file() {
     let datafile = "tests/data/heart_scale";
     check_data_file(datafile).unwrap();

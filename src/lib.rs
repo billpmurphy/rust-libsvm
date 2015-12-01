@@ -1,9 +1,12 @@
+/// Rust API and wrapper to the popular [libsvm](https://github.com/cjlin1/libsvm) library.
+
 use std::ffi::{CStr, CString};
 use std::fs::File;
 use std::io;
 use std::io::{BufReader, BufRead};
 use std::str;
 
+pub mod metrics;
 
 // ============================================================================================= //
 // FFI bindings to libsvm
@@ -59,33 +62,25 @@ struct CSVMModel {
 }
 
 extern "C" {
-    fn svm_save_model(model_file_name: *const i8,
-                      model: *const CSVMModel) -> i32;
+    static libsvm_version: i32;
+    fn svm_save_model(model_file_name: *const i8, model: *const CSVMModel) -> i32;
     fn svm_load_model(model_file_name: *const i8) -> *mut CSVMModel;
-    fn svm_train(prob: *const CSVMProb,
-                 param: *const CSVMParameter) -> *mut CSVMModel;
-    fn svm_predict(model: *const CSVMModel,
-                   x: *const CSVMNode) -> f64;
-    fn svm_cross_validation(prob: *const CSVMProb,
-                            param: *const CSVMParameter,
-                            nr_fold: i32,
+    fn svm_train(prob: *const CSVMProb, param: *const CSVMParameter) -> *mut CSVMModel;
+    fn svm_predict(model: *const CSVMModel, x: *const CSVMNode) -> f64;
+    fn svm_cross_validation(prob: *const CSVMProb, param: *const CSVMParameter, nr_fold: i32,
                             target: *mut f64) -> ();
     fn svm_get_svm_type(model: *const CSVMModel) -> i32;
     fn svm_get_nr_class(model: *const CSVMModel) -> i32;
     fn svm_get_nr_sv(model: *const CSVMModel) -> i32;
-    fn svm_get_labels(model: *const CSVMModel,
-                      label: *mut i32) -> ();
-    fn svm_get_sv_indices(model: *const CSVMModel,
-                          sv_indices: *mut i32) -> ();
+    fn svm_get_labels(model: *const CSVMModel, label: *mut i32) -> ();
+    fn svm_get_sv_indices(model: *const CSVMModel, sv_indices: *mut i32) -> ();
     fn svm_get_svr_probability(model: *const CSVMModel) -> f64;
-    fn svm_predict_values(model: *const CSVMModel,
-                          x: *const CSVMNode,
+    fn svm_predict_values(model: *const CSVMModel, x: *const CSVMNode,
                           dec_values: *const f64) -> f64;
-    fn svm_predict_probability(model: *const CSVMModel,
-                               x: *const CSVMNode,
+    fn svm_predict_probability(model: *const CSVMModel, x: *const CSVMNode,
                                prob_estimates: *const f64) -> f64;
-    fn svm_check_parameter(prob: *const CSVMProb,
-                           param: *const CSVMParameter) -> *const i8;
+    fn svm_check_parameter(prob: *const CSVMProb, param: *const CSVMParameter) -> *const i8;
+    fn svm_free_and_destroy_model(model_ptr_ptr: *const *const CSVMModel);
 }
 
 // ============================================================================================= //
@@ -138,9 +133,21 @@ pub enum KernelType {
     Precomputed = 4
 }
 
+/// Return the current version number of libsvm.
+pub fn version() -> i32 {
+    libsvm_version
+}
+
 ///
 pub struct SvmModel {
     c_model: *const CSVMModel
+}
+
+impl Drop for SvmModel {
+    fn drop(&mut self) {
+        let model_ptr_ptr: *const *const CSVMModel = &self.c_model;
+        unsafe { svm_free_and_destroy_model(model_ptr_ptr) }
+    }
 }
 
 impl SvmModel {
@@ -332,7 +339,7 @@ pub struct SvmProb {
 
 impl SvmProb {
     /// Save problem to file.
-    pub fn save(&self) -> Result<(), SvmErr> {
+    pub fn save(&self, filename: &str) -> Result<(), SvmErr> {
         panic!("Not implemented yet.")
     }
 
