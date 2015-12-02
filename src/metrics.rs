@@ -1,4 +1,4 @@
-/// Metrics for assessing SVM classification performance.
+//! Metrics for assessing SVM classification performance.
 
 use std::f64;
 

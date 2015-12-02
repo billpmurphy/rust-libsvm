@@ -1,92 +1,16 @@
-/// Rust API and wrapper to the popular [libsvm](https://github.com/cjlin1/libsvm) library.
+//! Rust API and wrapper to the popular [libsvm](https://github.com/cjlin1/libsvm) library.
 
 use std::ffi::{CStr, CString};
 use std::fs::File;
 use std::io;
 use std::io::{BufReader, BufRead};
+use std::result;
 use std::str;
 
 pub mod metrics;
+pub mod sys;
 
-// ============================================================================================= //
-// FFI bindings to libsvm
-
-#[repr(C)]
-struct CSVMProb {
-    l: i32,
-    y: *const f64,
-    data: *const *const CSVMNode
-}
-
-#[repr(C)]
-struct CSVMNode {
-    index: i32,
-    value: f64
-}
-
-#[allow(non_snake_case)]
-#[repr(C)]
-struct CSVMParameter {
-    svm_type: i32,
-    kernel_type: i32,
-    degree: i32,
-    gamma: f64,
-    coef0: f64,
-    cache_size: f64,
-    eps: f64,
-    C: f64,
-    nr_weight: i32,
-    weight_label: *const i32,
-    weight: *const f64,
-    nu: f64,
-    p: f64,
-    shrinking: i32,
-    probability: i32
-}
-
-#[allow(non_snake_case)]
-#[repr(C)]
-struct CSVMModel {
-    param: CSVMParameter,
-    nr_class: i32,
-    l: i32,
-    svm_node: *mut *mut CSVMNode,
-    sv_coef: *mut *mut f64,
-    rho: *mut f64,
-    probA: *mut f64,
-    probB: *mut f64,
-    sv_indices: *mut i32,
-    label: *mut i32,
-    nSV: *mut i32,
-    free_sv: i32
-}
-
-extern "C" {
-    static libsvm_version: i32;
-    fn svm_save_model(model_file_name: *const i8, model: *const CSVMModel) -> i32;
-    fn svm_load_model(model_file_name: *const i8) -> *mut CSVMModel;
-    fn svm_train(prob: *const CSVMProb, param: *const CSVMParameter) -> *mut CSVMModel;
-    fn svm_predict(model: *const CSVMModel, x: *const CSVMNode) -> f64;
-    fn svm_cross_validation(prob: *const CSVMProb, param: *const CSVMParameter, nr_fold: i32,
-                            target: *mut f64) -> ();
-    fn svm_get_svm_type(model: *const CSVMModel) -> i32;
-    fn svm_get_nr_class(model: *const CSVMModel) -> i32;
-    fn svm_get_nr_sv(model: *const CSVMModel) -> i32;
-    fn svm_get_labels(model: *const CSVMModel, label: *mut i32) -> ();
-    fn svm_get_sv_indices(model: *const CSVMModel, sv_indices: *mut i32) -> ();
-    fn svm_get_svr_probability(model: *const CSVMModel) -> f64;
-    fn svm_predict_values(model: *const CSVMModel, x: *const CSVMNode,
-                          dec_values: *const f64) -> f64;
-    fn svm_predict_probability(model: *const CSVMModel, x: *const CSVMNode,
-                               prob_estimates: *const f64) -> f64;
-    fn svm_check_parameter(prob: *const CSVMProb, param: *const CSVMParameter) -> *const i8;
-    fn svm_free_and_destroy_model(model_ptr_ptr: *const *const CSVMModel);
-}
-
-// ============================================================================================= //
-// Rust API
-
-type SvmNode = CSVMNode;
+type SvmNode = sys::CSVMNode;
 
 /// Error type for Rust libsvm API.
 #[derive(Debug)]
@@ -102,6 +26,9 @@ pub enum SvmErr {
     /// Error loading/saving SvmModel to/from file.
     ModelError(String),
 }
+
+/// Result type for rust_libsvm, parameterized with SvmErr.
+pub type Result<T> = result::Result<T, SvmErr>;
 
 /// The type of Support Vector Machine used in a model.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -135,29 +62,29 @@ pub enum KernelType {
 
 /// Return the current version number of libsvm.
 pub fn version() -> i32 {
-    libsvm_version
+    sys::libsvm_version
 }
 
-///
+/// Represents a trained classification or regression model.
 pub struct SvmModel {
-    c_model: *const CSVMModel
+    c_model: *const sys::CSVMModel
 }
 
 impl Drop for SvmModel {
     fn drop(&mut self) {
-        let model_ptr_ptr: *const *const CSVMModel = &self.c_model;
-        unsafe { svm_free_and_destroy_model(model_ptr_ptr) }
+        let model_ptr_ptr: *const *const sys::CSVMModel = &self.c_model;
+        unsafe { sys::svm_free_and_destroy_model(model_ptr_ptr) }
     }
 }
 
 impl SvmModel {
     /// Save model to file.
-    pub fn save(&self, filename: &str) -> Result<(), SvmErr> {
+    pub fn save(&self, filename: &str) -> Result<()> {
         let m = &self.c_model;
         let cfilename = try!(CString::new(filename)
                             .map_err(|_| SvmErr::ModelError("Invalid filename.".to_owned())));
         unsafe {
-            match svm_save_model(cfilename.as_ptr(), *m) {
+            match sys::svm_save_model(cfilename.as_ptr(), *m) {
                 0 => Ok(()),
                 n => Err(SvmErr::ModelError(format!("Failed to save model. Error code: {}", n)))
             }
@@ -166,25 +93,25 @@ impl SvmModel {
 
     /// Return the SvmType of the model.
     pub fn get_svm_type(&self) -> SvmType {
-        unsafe { std::mem::transmute(svm_get_svm_type(self.c_model) as i8) }
+        unsafe { std::mem::transmute(sys::svm_get_svm_type(self.c_model) as i8) }
     }
 
     /// For a classification model, return the number of classes. For a regression or a one-class
     /// model, return 2.
     pub fn get_num_classes(&self) -> i32 {
-        unsafe { svm_get_nr_class(self.c_model) }
+        unsafe { sys::svm_get_nr_class(self.c_model) }
     }
 
     /// Return the number of total support vectors.
     pub fn get_num_sv(&self) -> i32 {
-        unsafe { svm_get_nr_sv(self.c_model) }
+        unsafe { sys::svm_get_nr_sv(self.c_model) }
     }
 
     /// Return a vector of class labels.
     pub fn get_labels(&self) -> Vec<i32> {
         let num_labels = self.get_num_classes() as usize;
         let mut labels = vec![0; num_labels];
-        unsafe { svm_get_labels(self.c_model, labels.as_mut_ptr()); }
+        unsafe { sys::svm_get_labels(self.c_model, labels.as_mut_ptr()); }
         labels
     }
 
@@ -193,14 +120,14 @@ impl SvmModel {
     /// Laplace distribution e^(-|z|/sigma)/(2sigma). If the model is not for svr or does not
     /// contain required information, return 0.
     pub fn get_svr_probability(&self) -> f64 {
-        unsafe { svm_get_svr_probability(self.c_model) }
+        unsafe { sys::svm_get_svr_probability(self.c_model) }
     }
 
     /// Return the indicies of the support vectors.
     pub fn get_sv_indices(&self) -> Vec<i32> {
         let num_svs = self.get_num_sv() as usize;
         let mut indicies = vec![0; num_svs];
-        unsafe { svm_get_sv_indices(self.c_model, indicies.as_mut_ptr()); }
+        unsafe { sys::svm_get_sv_indices(self.c_model, indicies.as_mut_ptr()); }
         indicies
     }
 
@@ -214,10 +141,10 @@ impl SvmModel {
             .iter()
             .map(|&(i, c)| SvmNode { index: i, value: c })
             .collect();
-        let c_model: *const CSVMModel = self.c_model;
+        let c_model: *const sys::CSVMModel = self.c_model;
         let c_vec: *const SvmNode = svm_nodes.as_ptr();
         unsafe {
-            svm_predict(c_model, c_vec) as f64
+            sys::svm_predict(c_model, c_vec) as f64
         }
     }
 
@@ -257,33 +184,33 @@ impl SvmModel {
 /// The parameters of an SvmModel.
 pub struct SvmParam {
     /// The type of SVM.
-    svm_type: SvmType,
+    pub svm_type: SvmType,
     /// The type of kernel function.
-    kernel_type: KernelType,
+    pub kernel_type: KernelType,
     /// The degree of the kernel function.
-    degree: i32,
+    pub degree: i32,
     /// The gamma in the kernel function.
-    gamma: f64,
+    pub gamma: f64,
     /// The coef0 in the kernel function.
-    coef0: f64,
+    pub coef0: f64,
     /// The cache size in MB.
-    cache_size: f64,
+    pub cache_size: f64,
     /// Tolerance of stopping criterion.
-    eps: f64,
+    pub eps: f64,
     /// Cost of constraints violation for CSVC.
-    c: f64,
+    pub c: f64,
     /// Vector of weight labels for each class.
-    weight_label: Vec<i32>,
+    pub weight_label: Vec<i32>,
     /// The penalty of each class is scaled by the factor in this vector.
-    weight: Vec<f64>,
+    pub weight: Vec<f64>,
     /// Parameter nu of nu-SVC, one-class SVM, and nu-SVR.
-    nu: f64,
+    pub nu: f64,
     /// Epsilon in loss function of epsilon-SVR.
-    p: f64,
+    pub p: f64,
     /// Whether to use shrinking heuristics in the model.
-    shrinking: bool,
+    pub shrinking: bool,
     /// Whether to train a SVC or SVR model for probability estimates.
-    probability: bool
+    pub probability: bool
 }
 
 
@@ -309,8 +236,8 @@ impl SvmParam {
         }
     }
 
-    fn to_c(&self) -> CSVMParameter {
-        CSVMParameter {
+    fn to_c(&self) -> sys::CSVMParameter {
+        sys::CSVMParameter {
             svm_type: self.svm_type.clone() as i32,
             kernel_type: self.kernel_type.clone() as i32,
             degree: self.degree.clone(),
@@ -333,24 +260,24 @@ impl SvmParam {
 /// Describes a dataset, consisting of an output vector and a series of feature vectors in sparse
 /// format.
 pub struct SvmProb {
-    c_problem: CSVMProb
+    c_problem: sys::CSVMProb
 }
 
 
 impl SvmProb {
     /// Save problem to file.
-    pub fn save(&self, filename: &str) -> Result<(), SvmErr> {
+    pub fn save(&self, filename: &str) -> Result<()> {
         panic!("Not implemented yet.")
     }
 
     /// Construct and return an SVM model according to the given training data and parameters.
-    pub fn train(&self, parameters: &SvmParam) -> Result<SvmModel, SvmErr> {
+    pub fn train(&self, parameters: &SvmParam) -> Result<SvmModel> {
         let c_prob = &self.c_problem;
-        let c_params: *const CSVMParameter = &parameters.to_c();
+        let c_params: *const sys::CSVMParameter = &parameters.to_c();
         unsafe {
-            let result: *const i8 = svm_check_parameter(c_prob, c_params);
+            let result: *const i8 = sys::svm_check_parameter(c_prob, c_params);
             if result.is_null() {
-                Ok(SvmModel { c_model: svm_train(c_prob, c_params) })
+                Ok(SvmModel { c_model: sys::svm_train(c_prob, c_params) })
             } else {
                 let c_str: &CStr = CStr::from_ptr(result);
                 let buf: &[u8] = c_str.to_bytes();
@@ -361,22 +288,12 @@ impl SvmProb {
             }
         }
     }
-
-    /// Scale the feature vectors to [lower, upper].
-    pub fn scale_x(&mut self, lower: &Option<f64>, upper: &Option<f64>) {
-        panic!("Not implemented yet.")
-    }
-
-    /// Scale the y vector to [lower, upper].
-    pub fn scale_y(&mut self, lower: &Option<f64>, upper: &Option<f64>) {
-        panic!("Not implemented yet.")
-    }
 }
 
 
 /// Create an SvmProb from a vector of output variables and a vector of feature vectors represented
 /// as (index, value) pairs.
-pub fn sparse_problem(y: Vec<f64>, x: Vec<Vec<(i32, f64)>>) -> Result<SvmProb, SvmErr> {
+pub fn sparse_problem(y: Vec<f64>, x: Vec<Vec<(i32, f64)>>) -> Result<SvmProb> {
     // Data check: Problem is not empty
     if y.len() == 0 || x.len() == 0 {
         return Err(SvmErr::InvalidDataError(format!("Cannot create problem from empty vector")))
@@ -395,15 +312,15 @@ pub fn sparse_problem(y: Vec<f64>, x: Vec<Vec<(i32, f64)>>) -> Result<SvmProb, S
         let mut new_row = Vec::new();
         for (i, cell) in row {
             if cell != 0.0 {
-                new_row.push(CSVMNode { index: i, value: cell });
+                new_row.push(sys::CSVMNode { index: i, value: cell });
             }
         }
-        new_row.push(CSVMNode { index: -1, value: 0.0 });
+        new_row.push(sys::CSVMNode { index: -1, value: 0.0 });
         x_data.push(new_row.as_ptr());
     }
 
     Ok(SvmProb {
-        c_problem: CSVMProb {
+        c_problem: sys::CSVMProb {
             l: len as i32,
             y: y.as_ptr(),
             data: x_data.as_ptr()
@@ -413,7 +330,7 @@ pub fn sparse_problem(y: Vec<f64>, x: Vec<Vec<(i32, f64)>>) -> Result<SvmProb, S
 
 
 /// Create a SvmProb from a one-dimensional output vector and a two-dimensional input vector.
-pub fn dense_problem(y: Vec<f64>, x: Vec<Vec<f64>>) -> Result<SvmProb, SvmErr> {
+pub fn dense_problem(y: Vec<f64>, x: Vec<Vec<f64>>) -> Result<SvmProb> {
     // Data check: Problem is not empty
     if y.len() == 0 || x.len() == 0 {
         return Err(SvmErr::InvalidDataError(format!("Cannot create problem from empty vector")))
@@ -427,21 +344,21 @@ pub fn dense_problem(y: Vec<f64>, x: Vec<Vec<f64>>) -> Result<SvmProb, SvmErr> {
     }
 
     // Convert the data into a vector of C arrays of SVMNode structs
-    let mut x_data: Vec<*const CSVMNode> = Vec::new();
+    let mut x_data: Vec<*const sys::CSVMNode> = Vec::new();
     for row in x {
         let mut new_row = Vec::new();
         for (i, &cell) in row.iter().enumerate() {
             if i != 0 {
-                new_row.push(CSVMNode { index: i as i32, value: cell });
+                new_row.push(sys::CSVMNode { index: i as i32, value: cell });
             }
         }
-        new_row.push(CSVMNode { index: -1, value: 0.0 });
+        new_row.push(sys::CSVMNode { index: -1, value: 0.0 });
         x_data.push(new_row.as_ptr());
     }
 
     // Build the SvmProb struct
     Ok(SvmProb {
-        c_problem: CSVMProb {
+        c_problem: sys::CSVMProb {
             l: len as i32,
             y: y.as_ptr(),
             data: x_data.as_ptr()
@@ -450,11 +367,11 @@ pub fn dense_problem(y: Vec<f64>, x: Vec<Vec<f64>>) -> Result<SvmProb, SvmErr> {
 }
 
 /// Load a model from file.
-pub fn load_model(filename: &str) -> Result<SvmModel, SvmErr> {
+pub fn load_model(filename: &str) -> Result<SvmModel> {
     let cfilename = try!(CString::new(filename)
                          .map_err(|_| SvmErr::ModelError("Invalid filename.".to_owned())));
     unsafe {
-        let model: *const CSVMModel = svm_load_model(cfilename.as_ptr());
+        let model: *const sys::CSVMModel = sys::svm_load_model(cfilename.as_ptr());
         if model.is_null() {
             Err(SvmErr::ModelError("Failed to load model.".to_owned()))
         } else {
@@ -465,7 +382,7 @@ pub fn load_model(filename: &str) -> Result<SvmModel, SvmErr> {
 
 
 /// Load a problem from file.
-pub fn load_problem(filename: &str) -> Result<SvmProb, SvmErr> {
+pub fn load_problem(filename: &str) -> Result<SvmProb> {
     let f = try!(File::open(filename).map_err(SvmErr::IoError));
     let file = BufReader::new(&f);
 
@@ -481,7 +398,7 @@ pub fn load_problem(filename: &str) -> Result<SvmProb, SvmErr> {
 }
 
 /// Check whether a file is in the correct data format.
-pub fn check_data_file(filename: &str) -> Result<(), SvmErr> {
+pub fn check_data_file(filename: &str) -> Result<()> {
     let f = try!(File::open(filename).map_err(SvmErr::IoError));
     let file = BufReader::new(&f);
     for line in file.lines() {
@@ -503,7 +420,7 @@ pub fn check_data_file(filename: &str) -> Result<(), SvmErr> {
 /// +1 1:1, 2:-2.3 -1:0
 /// -1
 /// 2
-fn parse_line(linestr: &str) -> Result<(f64, Vec<(i32, f64)>), SvmErr> {
+fn parse_line(linestr: &str) -> Result<(f64, Vec<(i32, f64)>)> {
     let line = linestr.trim();
     let tokens: Vec<&str> = line.split(' ').collect();
     match tokens.len() {
@@ -525,7 +442,7 @@ fn parse_line(linestr: &str) -> Result<(f64, Vec<(i32, f64)>), SvmErr> {
 /// Parse an <index>:<value> pair from the svm file format. An <index>:<value> pair consists of an
 /// i32-valued index and an f64-valued cell value, separated by a colon.
 /// Examples: 1:1, 2:2, 3:3.0, 4:-4, 5:-5.5
-fn parse_index_value_pair(s: &str) -> Result<(i32, f64), SvmErr> {
+fn parse_index_value_pair(s: &str) -> Result<(i32, f64)> {
     let tokens: Vec<&str> = s.split(':').collect();
     if tokens.len() == 2 {
         let index = try!(tokens[0].parse().map_err(|_|
@@ -542,7 +459,7 @@ fn parse_index_value_pair(s: &str) -> Result<(i32, f64), SvmErr> {
 
 /// Parse an output variable from the svm file format. An output variable is an f64 value.
 /// Examples: +1, 2, -3, +4.0, 5.55, -6.0
-fn parse_output_var(s: &str) -> Result<f64, SvmErr> {
+fn parse_output_var(s: &str) -> Result<f64> {
     let mut chars = s.chars();
     match chars.next() {
         Some('+') => parse_output_var(&chars.collect::<String>()),

@@ -36,7 +36,8 @@ fn test_parse_data_from_file() {
     let datafile = "tests/data/heart_scale";
     check_data_file(datafile).unwrap();
     let problem = load_problem(datafile).unwrap();
-    let params = SvmParam::new(2);
+    let mut params = SvmParam::new(2);
+    params.probability = true;
     let model = problem.train(&params).unwrap();
 
     assert_eq!(model.get_num_classes(), 2);
